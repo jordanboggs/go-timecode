@@ -2,117 +2,128 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 )
 
-type FrameCount uint64
-
-type FrameRate string
+type framerates string
 
 const (
-	NDF25 FrameRate = "NDF25"
-	DF30  FrameRate = "DF30"
+	ndf25 string = "NDF25"
+	df30  string = "DF30"
 )
 
-func (fr FrameRate) Name() (name string) {
-	switch fr {
-	case NDF25:
-		name = "NDF25"
-	case DF30:
-		name = "DF30"
+func validateFramerate(framerate string) (ok bool) {
+	switch strings.ToUpper(framerate) {
+	case ndf25, df30:
+		ok = true
 	}
-	return name
+	return ok
 }
 
-func (fr FrameRate) Rate() (rate uint64) {
-	switch fr {
-	case NDF25:
+func isDropFrame(framerate string) (df bool) {
+	switch strings.ToUpper(framerate) {
+	case ndf25:
+		df = false
+	case df30:
+		df = true
+	}
+	return df
+}
+
+func getRate(framerate string) (rate uint64) {
+	switch strings.ToUpper(framerate) {
+	case ndf25:
 		rate = 25
-	case DF30:
+	case df30:
 		rate = 30
 	}
 	return rate
 }
 
-func (fr FrameRate) DropFrame() bool {
-	if fr == DF30 {
-		return true
+func makeArrayFromTimecode(timecode string) (tcArr []uint64, err error) {
+	// figure out logic
+	// throw error if can't make valid array
+	tcArrStr := strings.Split(timecode, ":")
+	if len(tcArrStr) != 4 { // use cap()?
+		return tcArr, fmt.Errorf("Invalid timecode:", timecode)
 	}
-	return false
-}
-
-type Frame interface {
-	Text() string
-	NumFrames() uint64
-	Rate() string
-	ParseText(string, string) (Frame, error)
-	ParseFrames(string, uint64) (Frame, error)
-}
-
-type FrameLabel struct {
-	FrameCount FrameCount
-	FrameRate  FrameRate
-}
-
-// Text returns frame as string (e.g., 01:00:00:00)
-func (fl FrameLabel) Text() string {
-	return ""
-}
-
-// NumFrames returns frame as number of frames (e.g., 90000)
-func (fl FrameLabel) NumFrames() uint64 {
-	return 0
-}
-
-// Rate returns the Frame's frame rate
-func (fl FrameLabel) Rate() string {
-	return ""
-}
-
-// ParseText creates a new FrameLabel from text
-func (fl FrameLabel) ParseText(frameRate string, timecode string) (FrameLabel, error) {
-	// convert timecode to number of frames
-	numFrames, err := AsFrames(timecode)
-
-	var rate FrameRate
-	switch frameRate {
-	case "NDF25":
-		rate = NDF25
-	case "DF30":
-		rate = DF30
-	default:
-		return FrameLabel{}, fmt.Errorf("Invalid frame rate: ", frameRate)
+	for i, num := range tcArrStr {
+		iNum, err := strconv.ParseInt(num, 10, 64)
+		if err != nil {
+			return tcArr, err
+		}
+		num := uint64(iNum)
+		if i > 0 && i < 3 && num > 59 {
+			return tcArr, fmt.Errorf("Invalid timecode:", timecode)
+		}
 	}
-	return FrameLabel{numFrames, rate}, nil
+
+	// additional handling for dropframe
+	return tcArr, nil
 }
 
-// ParseFrames creates a new FrameLabel from uint64 number of frames
-func (fl FrameLabel) ParseFrames(frameRate string, numFrames uint64) (FrameLabel, error) {
+func validateTimecode(timecode string, framerate string) (ok bool, err error) {
+	// figure out logic
+	tcArr, tcErr := makeArrayFromTimecode(timecode)
+	if tcErr != nil {
+		return false, tcErr
+	}
+	// validate that the numbers make sense
 
+	// additional dropframe logic
+
+	return ok, nil
 }
 
-type AmountOfTime struct {
-	FrameCount
-	FrameRate
+func convertTcToFr(timecode string, framerate string) (frames uint64) {
+	if !isDropFrame(framerate) {
+		rate := getRate(framerate)
+		tcArr, _ := makeArrayFromTimecode(timecode)
+	}
+	return frames
 }
 
-// Text returns frame as string (e.g., 01:00:00:00)
-func (aot AmountOfTime) Text() string {
-	return ""
+// Duration represents a timecode label Label, a framerate Rate,
+// and its calculated number of frames Frames
+type Duration struct {
+	Label  string
+	Rate   string
+	Frames uint64
 }
 
-// NumFrames returns frame as number of frames (e.g., 90000)
-func (aot AmountOfTime) NumFrames() uint64 {
-	return 0
-}
+// NewDurationFromString returns a new Duration object
+func NewDurationFromString(timecode string, framerate string) (Duration, error) {
+	// timecode and framerate validation
+	ok, err := validateTimecode(timecode, framerate)
+	if !ok {
+		return Duration{}, err
+	}
 
-// Rate returns the Frame's frame rate
-func (aot AmountOfTime) Rate() string {
-	return ""
+	return Duration{
+		Label:  timecode,
+		Rate:   framerate,
+		Frames: convertTcToFr(timecode, framerate),
+	}, nil
 }
 
 func main() {
-	fmt.Printf("%s: %d, Drop Frame: %t\n", NDF25.Name(), NDF25.Rate(), NDF25.DropFrame())
-	fmt.Printf("%s: %d, Drop Frame: %t\n", DF30.Name(), DF30.Rate(), DF30.DropFrame())
-	var newLabel FrameLabel
-	newLabel, err := newLabel.ParseText("NDF25", "01:30:11:12")
+	// Create duration object of 1:02:03:04 @ NDF25
+	duration, err := NewDurationFromString("1:02:03:04", "NDF25")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Duration:", duration)
+	// Create a timecode object at 10:31:00;02 @ DF30
+	// Create duration from 10000 frames @ DF30
+	// Create a timecode object from 90000 frames @ NDF25
+
+	// Convert between NDF25 and DF30
+	// Convert between number of frames and timecode label
+	// Convert between duration and timecode label
+
+	// Add a duration to a timecode
+	// Subtract a timecode from a duration
+	// Add a duration to a duration
+	// Subtract a timecode from a timecode
 }
